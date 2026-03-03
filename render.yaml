@@ -1,0 +1,60 @@
+# yaml-language-server: $schema=https://render.com/schema/render.yaml.json
+#
+# Customer Data Merge - Render Workflows Demo
+#
+# This Blueprint deploys the frontend and API services.
+# Workflows must be created manually in the Render Dashboard
+# (see README.md for instructions).
+
+projects:
+  - name: customer-data-merge
+    environments:
+      - name: production
+        services:
+          # Frontend - Next.js static site
+          - type: web
+            name: customer-merge-frontend
+            runtime: static
+            rootDir: frontend
+            buildCommand: npm install && npm run build
+            staticPublishPath: out
+            envVars:
+              - key: NEXT_PUBLIC_API_URL
+                fromService:
+                  type: web
+                  name: customer-merge-api-python
+                  property: host
+
+          # Python API - FastAPI service
+          - type: web
+            name: customer-merge-api-python
+            runtime: python
+            plan: starter
+            rootDir: python/api
+            buildCommand: pip install -r requirements.txt
+            startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
+            envVars:
+              - key: RENDER_API_KEY
+                sync: false
+              - key: WORKFLOW_SLUG
+                sync: false
+
+          # Choose either the Python API above OR the TypeScript API below,
+          # depending on your preference. Uncomment the one you want and
+          # comment out the other. If using TypeScript, also update the
+          # frontend's NEXT_PUBLIC_API_URL to reference
+          # customer-merge-api-typescript instead.
+          #
+          # # TypeScript API - Fastify service
+          # - type: web
+          #   name: customer-merge-api-typescript
+          #   runtime: node
+          #   plan: starter
+          #   rootDir: typescript/api
+          #   buildCommand: npm install && npm run build
+          #   startCommand: npm start
+          #   envVars:
+          #     - key: RENDER_API_KEY
+          #       sync: false
+          #     - key: WORKFLOW_SLUG
+          #       sync: false
