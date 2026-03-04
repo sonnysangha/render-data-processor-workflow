@@ -38,6 +38,8 @@ projects:
                 sync: false
               - key: WORKFLOW_SLUG
                 sync: false
+              - key: DEMO_MODE
+                sync: false
 
           # Choose either the Python API above OR the TypeScript API below,
           # depending on your preference. Uncomment the one you want and
@@ -57,4 +59,6 @@ projects:
           #     - key: RENDER_API_KEY
           #       sync: false
           #     - key: WORKFLOW_SLUG
+          #       sync: false
+          #     - key: DEMO_MODE
           #       sync: false

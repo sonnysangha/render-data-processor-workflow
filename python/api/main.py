@@ -4,7 +4,7 @@ import asyncio
 from typing import Optional
 
 import httpx
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from render_sdk import RenderAsync
@@ -37,6 +37,13 @@ WORKFLOW_SLUG = f"{WORKFLOW_NAME}/{TASK_NAME}"
 
 # In-memory store for run metadata (in production, use Redis or DB)
 run_metadata: dict[str, dict] = {}
+RUN_METADATA_MAX_SIZE = 1000
+
+# Demo mode: when enabled, rate-limits /trigger to prevent abuse of the
+# public live instance. Users who clone this template can leave it unset.
+DEMO_MODE = os.getenv("DEMO_MODE", "").lower() in ("1", "true")
+DEMO_TRIGGER_COOLDOWN_SECONDS = 10
+trigger_timestamps: dict[str, float] = {}
 
 
 async def get_task_run_with_retry(task_id: str):
@@ -82,9 +89,19 @@ async def health():
 
 
 @app.post("/trigger", response_model=TriggerResponse)
-async def trigger_workflow():
+async def trigger_workflow(request: Request):
     """Trigger the customer data merge workflow."""
     try:
+        if DEMO_MODE:
+            client_ip = request.client.host if request.client else "unknown"
+            last_trigger = trigger_timestamps.get(client_ip, 0)
+            if time.time() - last_trigger < DEMO_TRIGGER_COOLDOWN_SECONDS:
+                raise HTTPException(
+                    status_code=429,
+                    detail="Please wait before triggering another workflow run.",
+                )
+            trigger_timestamps[client_ip] = time.time()
+
         start_time = time.time()
         
         # start_task returns immediately with the run ID;
@@ -92,7 +109,10 @@ async def trigger_workflow():
         task_run = await render.workflows.start_task(WORKFLOW_SLUG, [])
         run_id = task_run.id
         
-        # Store metadata
+        # Store metadata (evict oldest entries when at capacity)
+        if DEMO_MODE and len(run_metadata) >= RUN_METADATA_MAX_SIZE:
+            oldest_key = next(iter(run_metadata))
+            del run_metadata[oldest_key]
         run_metadata[run_id] = {
             "start_time": start_time,
             "status": "pending",
@@ -100,6 +120,8 @@ async def trigger_workflow():
         
         return TriggerResponse(runId=run_id, status="pending")
     
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

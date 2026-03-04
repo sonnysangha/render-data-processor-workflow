@@ -20,6 +20,15 @@ const WORKFLOW_SLUG = `${WORKFLOW_NAME}/${TASK_NAME}`;
 // In-memory store for run metadata
 const runMetadata: Map<string, { startTime: number; status: string }> =
   new Map();
+const RUN_METADATA_MAX_SIZE = 1000;
+
+// Demo mode: when enabled, rate-limits /trigger to prevent abuse of the
+// public live instance. Users who clone this template can leave it unset.
+const DEMO_MODE = ["1", "true"].includes(
+  (process.env.DEMO_MODE || "").toLowerCase()
+);
+const DEMO_TRIGGER_COOLDOWN_MS = 10_000;
+const triggerTimestamps: Map<string, number> = new Map();
 
 // Types
 interface TriggerResponse {
@@ -72,15 +81,33 @@ fastify.get("/health", async () => {
 });
 
 // Trigger workflow
-fastify.post<{ Reply: TriggerResponse }>("/trigger", async (_request, reply) => {
+fastify.post<{ Reply: TriggerResponse }>("/trigger", async (request, reply) => {
   try {
+    if (DEMO_MODE) {
+      const clientIp = request.ip;
+      const lastTrigger = triggerTimestamps.get(clientIp) ?? 0;
+      if (Date.now() - lastTrigger < DEMO_TRIGGER_COOLDOWN_MS) {
+        reply.code(429);
+        return {
+          runId: "",
+          status: "error",
+          error: "Please wait before triggering another workflow run.",
+        };
+      }
+      triggerTimestamps.set(clientIp, Date.now());
+    }
+
     const startTime = Date.now();
 
     // Trigger the workflow
     const taskRun = await render.workflows.runTask(WORKFLOW_SLUG, []);
     const runId = taskRun.id;
 
-    // Store metadata
+    // Store metadata (evict oldest entries when at capacity)
+    if (DEMO_MODE && runMetadata.size >= RUN_METADATA_MAX_SIZE) {
+      const oldestKey = runMetadata.keys().next().value!;
+      runMetadata.delete(oldestKey);
+    }
     runMetadata.set(runId, {
       startTime,
       status: "pending",
