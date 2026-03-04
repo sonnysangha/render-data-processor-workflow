@@ -148,7 +148,7 @@ async def get_status(run_id: str):
         )
         
         # If completed, add results
-        if status == "succeeded" and task_run.results:
+        if status == "completed" and task_run.results:
             # results is always a list; the task return value is the first element
             results = task_run.results[0] if task_run.results else {}
             if isinstance(results, dict):

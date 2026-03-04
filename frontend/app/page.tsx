@@ -70,14 +70,14 @@ export default function Home() {
         const status = await pollWorkflowStatus(runId);
 
         // Cycle through processing messages while not completed
-        if (status.status !== "succeeded" && status.status !== "failed" && attempts >= nextMessageChange) {
+        if (status.status !== "completed" && status.status !== "failed" && attempts >= nextMessageChange) {
           processingIndexRef.current = (processingIndexRef.current + 1) % PROCESSING_MESSAGES.length;
           updateLastLog(PROCESSING_MESSAGES[processingIndexRef.current]);
           // Next change in 2-4 polls (1-2 seconds)
           nextMessageChange = attempts + 2 + Math.floor(Math.random() * 3);
         }
 
-        if (status.status === "succeeded") {
+        if (status.status === "completed") {
           workflowResult = status;
           break;
         }
