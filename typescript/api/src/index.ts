@@ -119,7 +119,7 @@ fastify.get<{ Params: { runId: string }; Reply: StatusResponse }>(
       };
 
       // If completed, add results and shard timings
-      if (taskRun.status === "completed" && taskRun.results) {
+      if (taskRun.status === "succeeded" && taskRun.results) {
         // Results could be an array or object depending on SDK version
         const results =
           Array.isArray(taskRun.results) && taskRun.results.length > 0

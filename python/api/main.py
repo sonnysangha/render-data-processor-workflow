@@ -7,8 +7,7 @@ import httpx
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from render_sdk import Render
-from render_sdk.public_api.types import UNSET
+from render_sdk import RenderAsync
 
 
 app = FastAPI(
@@ -27,7 +26,7 @@ app.add_middleware(
 )
 
 # Render SDK client
-render = Render()
+render = RenderAsync()
 
 # Workflow configuration
 # WORKFLOW_SLUG should be just the workflow name (e.g., "data-processor-workflows-py")
@@ -44,11 +43,9 @@ async def get_task_run_with_retry(task_id: str):
     """Get task run details, retrying until completed_at is populated."""
     for _ in range(5):
         details = await render.workflows.get_task_run(task_id)
-        # completed_at is a datetime object or UNSET
-        if details.completed_at is not UNSET:
+        if details.completed_at is not None:
             return details
         await asyncio.sleep(0.5)
-    # Return last attempt even without completed_at
     return await render.workflows.get_task_run(task_id)
 
 
@@ -90,8 +87,9 @@ async def trigger_workflow():
     try:
         start_time = time.time()
         
-        # Trigger the workflow
-        task_run = await render.workflows.run_task(WORKFLOW_SLUG, [])
+        # start_task returns immediately with the run ID;
+        # run_task would block until the workflow completes.
+        task_run = await render.workflows.start_task(WORKFLOW_SLUG, [])
         run_id = task_run.id
         
         # Store metadata
@@ -128,11 +126,9 @@ async def get_status(run_id: str):
         )
         
         # If completed, add results
-        if status == "completed" and task_run.results:
-            # Results could be a list or dict depending on SDK version
-            results = task_run.results
-            if isinstance(results, list) and len(results) > 0:
-                results = results[0]
+        if status == "succeeded" and task_run.results:
+            # results is always a list; the task return value is the first element
+            results = task_run.results[0] if task_run.results else {}
             if isinstance(results, dict):
                 response.profilesGenerated = results.get("profiles_generated")
                 response.recordsProcessed = results.get("records_processed")
@@ -164,9 +160,8 @@ async def get_status(run_id: str):
                                 # Use SDK to get full task run details
                                 details = await get_task_run_with_retry(task_id)
                                 
-                                # Get timestamps (datetime objects or UNSET)
-                                started_at = details.started_at if details.started_at is not UNSET else None
-                                completed_at = details.completed_at if details.completed_at is not UNSET else None
+                                started_at = details.started_at
+                                completed_at = details.completed_at
                                 
                                 print(f"Task {task_id}: started_at={started_at}, completed_at={completed_at}")
                                 

@@ -6,7 +6,7 @@ export interface ShardTiming {
 }
 
 export interface WorkflowResult {
-  status: "pending" | "running" | "completed" | "failed";
+  status: "pending" | "running" | "succeeded" | "failed";
   runId: string;
   profilesGenerated?: number;
   recordsProcessed?: number;
