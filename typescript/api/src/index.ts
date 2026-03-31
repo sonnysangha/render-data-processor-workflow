@@ -99,9 +99,9 @@ fastify.post<{ Reply: TriggerResponse }>("/trigger", async (request, reply) => {
 
     const startTime = Date.now();
 
-    // Trigger the workflow
-    const taskRun = await render.workflows.runTask(WORKFLOW_SLUG, []);
-    const runId = taskRun.id;
+    // Trigger the workflow (startTask returns immediately, no SSE blocking)
+    const taskRun = await render.workflows.startTask(WORKFLOW_SLUG, []);
+    const runId = taskRun.taskRunId;
 
     // Store metadata (evict oldest entries when at capacity)
     if (DEMO_MODE && runMetadata.size >= RUN_METADATA_MAX_SIZE) {
@@ -172,7 +172,8 @@ fastify.get<{ Params: { runId: string }; Reply: StatusResponse }>(
           let totalSequentialMs = 0;
           let maxParallelMs = 0;
 
-          for (const subtask of subtasks) {
+          for (const entry of subtasks) {
+            const subtask = entry.taskRun;
             const details = await getTaskRunWithRetry(subtask.id);
             
             const startedAt = details.startedAt;
@@ -203,7 +204,7 @@ fastify.get<{ Params: { runId: string }; Reply: StatusResponse }>(
 
             shardTimings.push({
               shard_id: shardId,
-              task_run_id: subtask.id,
+              task_run_id: entry.taskRun.id,
               elapsed_ms: taskElapsedMs,
               count,
             });

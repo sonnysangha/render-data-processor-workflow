@@ -1,2 +1,2 @@
-render-sdk
+render-sdk>=0.6.0
 pandas>=2.2.0
