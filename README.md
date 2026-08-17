@@ -139,7 +139,7 @@ Same customer always routes to the same shard across all files.
 |----------|---------|---------|
 | `RENDER_API_KEY` | (required for deployed services; use `local` for local dev) | API services |
 | `RENDER_USE_LOCAL_DEV` | `false` | API services (set `true` for local dev) |
-| `WORKFLOW_SLUG` | `data-processor-workflows-py` / `data-processor-workflows-ts` | API services |
+| `WORKFLOW_SLUG` | Workflow service slug returned by `render workflows list` | API services |
 | `DATA_DIR` | `../../sample_data` | Workflow services |
 | `NEXT_PUBLIC_API_URL` | `http://localhost:8001` | Frontend |
 
@@ -196,7 +196,7 @@ render workflows create \
 On each API service, set:
 
 - `RENDER_API_KEY`: Your Render API key (create at Dashboard → Account → API Keys)
-- `WORKFLOW_SLUG`: `data-processor-workflows-ts`
+- `WORKFLOW_SLUG`: the exact Workflow Slug returned by `render workflows list -o json` (Render can append a suffix)
 - `DEMO_MODE`: `true` for the public demo
 - `FRONTEND_ORIGIN`: the frontend's exact public `https://...onrender.com` URL
 
@@ -330,7 +330,7 @@ python scripts/generate_data.py --rows 1000000  # 1M rows
 
 ### Workflow not found
 
-- Check `WORKFLOW_SLUG` matches the workflow service name in the Dashboard
+- Check `WORKFLOW_SLUG` matches the exact Workflow Slug, not only the service name
 - Ensure workflow deployed successfully in Dashboard
 
 ### API key errors

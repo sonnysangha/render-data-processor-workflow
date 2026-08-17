@@ -61,13 +61,20 @@ following values when Render prompts for variables marked `sync: false`:
 
 ```dotenv
 RENDER_API_KEY=<server-side Render API key>
+WORKFLOW_SLUG=<generated Workflow Slug from render workflows list>
 FRONTEND_ORIGIN=<frontend public https://...onrender.com URL>
+```
+
+Render can append a suffix to the Workflow Slug even when the service name is
+`data-processor-workflows-ts`. Copy the exact `slug` value returned by:
+
+```bash
+render workflows list -o json
 ```
 
 The Blueprint sets these non-secret API values itself:
 
 ```dotenv
-WORKFLOW_SLUG=data-processor-workflows-ts
 DEMO_MODE=true
 ```
 
