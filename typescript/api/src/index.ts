@@ -2,10 +2,16 @@ import Fastify from "fastify";
 import cors from "@fastify/cors";
 import { Render } from "@renderinc/sdk";
 
-const fastify = Fastify({ logger: true });
+const fastify = Fastify({ logger: true, trustProxy: true });
 
-// CORS for frontend
-await fastify.register(cors, { origin: true });
+// Only allow the deployed frontend (or local dev frontend) to call this API.
+const frontendOrigins = (
+  process.env.FRONTEND_ORIGIN || "http://localhost:3000"
+)
+  .split(",")
+  .map((origin) => origin.trim())
+  .filter(Boolean);
+await fastify.register(cors, { origin: frontendOrigins });
 
 // Render SDK client
 const render = new Render();
@@ -167,7 +173,13 @@ fastify.get<{ Params: { runId: string }; Reply: StatusResponse }>(
 
         // Fetch subtask details for timing info using SDK
         try {
-          const subtasks = await render.workflows.listTaskRuns({ rootTaskRunId: [runId], limit: 100 });
+          const taskRuns = await render.workflows.listTaskRuns({
+            rootTaskRunId: [runId],
+            limit: 100,
+          });
+          const subtasks = taskRuns.filter(
+            (entry) => entry.taskRun.parentTaskRunId === runId
+          );
           const shardTimings: ShardTiming[] = [];
           let totalSequentialMs = 0;
           let maxParallelMs = 0;

@@ -56,23 +56,24 @@ export default function EventLog({ logs, isRunning }: EventLogProps) {
       {logs.length === 0 ? (
         <div className="text-gray-500">{">"} WAITING FOR WORKFLOW START...</div>
       ) : (
-        <>
-          {logs.map((log, index) => {
-            const isLastLog = index === logs.length - 1;
-            const showCursor = isRunning && isLastLog;
-            return (
-              <div key={`${log.timestamp.getTime()}-${index}`} className="flex gap-4 py-0.5">
-                <span className={getTypeColor(log.type)}>
-                  {">"} {log.message}
-                  {showCursor && <span className="cursor-blink">_</span>}
-                </span>
-                <span className="text-gray-500 ml-auto">
-                  {formatTimestamp(log.timestamp, startTime)}
-                </span>
-              </div>
-            );
-          })}
-        </>
+        logs.map((log, index) => {
+          const isLastLog = index === logs.length - 1;
+          const showCursor = isRunning && isLastLog;
+          return (
+            <div
+              key={`${log.timestamp.getTime()}-${index}`}
+              className="flex gap-4 py-0.5"
+            >
+              <span className={getTypeColor(log.type)}>
+                {">"} {log.message}
+                {showCursor && <span className="cursor-blink">_</span>}
+              </span>
+              <span className="text-gray-500 ml-auto">
+                {formatTimestamp(log.timestamp, startTime)}
+              </span>
+            </div>
+          );
+        })
       )}
     </div>
   );

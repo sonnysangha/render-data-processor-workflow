@@ -28,8 +28,11 @@ type Record = { [key: string]: unknown };
 
 interface ShardResult {
   shard_id: number;
-  profiles: EnrichedProfile[];
   count: number;
+  records_processed: number;
+  health_score_sum: number;
+  churn_distribution: { LOW: number; MEDIUM: number; HIGH: number };
+  sample_profile: EnrichedProfile | null;
 }
 
 interface AggregatedResult {
@@ -106,9 +109,17 @@ const mergeCustomerData = task(
  * Each subtask loads its own data to avoid large payload transfers between tasks.
  */
 const processShard = task(
-  { name: "process_shard" },
+  {
+    name: "process_shard",
+    retry: {
+      maxRetries: 3,
+      waitDurationMs: 1000,
+      backoffScaling: 2,
+    },
+  },
   function processShard(shardId: number): ShardResult {
-    console.log(`Shard ${shardId}: Loading CSV files...`);
+    const startedAt = performance.now();
+    console.log(JSON.stringify({ event: "shard_started", shard_id: shardId }));
 
     // Load all source CSVs in this subtask
     const crmRecords = loadCsv("crm.csv");
@@ -122,9 +133,22 @@ const processShard = task(
     const productShard = filterRecordsForShard(productRecords, shardId);
     const supportShard = filterRecordsForShard(supportRecords, shardId);
 
+    const recordsProcessed =
+      crmShard.length +
+      billingShard.length +
+      productShard.length +
+      supportShard.length;
+
     console.log(
-      `Shard ${shardId}: Processing ${crmShard.length} CRM, ${billingShard.length} billing, ` +
-      `${productShard.length} product, ${supportShard.length} support records`
+      JSON.stringify({
+        event: "shard_input_loaded",
+        shard_id: shardId,
+        crm_records: crmShard.length,
+        billing_records: billingShard.length,
+        product_records: productShard.length,
+        support_records: supportShard.length,
+        records_processed: recordsProcessed,
+      })
     );
 
     // Index records by customer_id
@@ -178,12 +202,30 @@ const processShard = task(
       profiles.push(enriched);
     }
 
-    console.log(`Shard ${shardId}: Generated ${profiles.length} enriched profiles`);
+    const churnDistribution = { LOW: 0, MEDIUM: 0, HIGH: 0 };
+    let healthScoreSum = 0;
+    for (const profile of profiles) {
+      churnDistribution[profile.churn_risk]++;
+      healthScoreSum += profile.health_score;
+    }
+
+    console.log(
+      JSON.stringify({
+        event: "shard_completed",
+        shard_id: shardId,
+        profiles_generated: profiles.length,
+        records_processed: recordsProcessed,
+        elapsed_ms: Math.round(performance.now() - startedAt),
+      })
+    );
 
     return {
       shard_id: shardId,
-      profiles,
       count: profiles.length,
+      records_processed: recordsProcessed,
+      health_score_sum: healthScoreSum,
+      churn_distribution: churnDistribution,
+      sample_profile: profiles[0] ?? null,
     };
   }
 );
@@ -195,35 +237,29 @@ const processShard = task(
  * large profile data between tasks.
  */
 function aggregateResults(shardResults: ShardResult[]): AggregatedResult {
-  const allProfiles: EnrichedProfile[] = [];
+  let totalProfiles = 0;
+  let totalRecords = 0;
+  let healthScoreSum = 0;
+  const churnCounts = { LOW: 0, MEDIUM: 0, HIGH: 0 };
+  let sampleProfile: EnrichedProfile | null = null;
 
   for (const shardResult of shardResults) {
-    allProfiles.push(...shardResult.profiles);
+    totalProfiles += shardResult.count;
+    totalRecords += shardResult.records_processed;
+    healthScoreSum += shardResult.health_score_sum;
+    churnCounts.LOW += shardResult.churn_distribution.LOW;
+    churnCounts.MEDIUM += shardResult.churn_distribution.MEDIUM;
+    churnCounts.HIGH += shardResult.churn_distribution.HIGH;
+    sampleProfile ??= shardResult.sample_profile;
   }
 
-  // Get a sample profile for the frontend preview
-  const sampleProfile = allProfiles.length > 0 ? allProfiles[0] : null;
-
-  // Calculate statistics
-  const totalProfiles = allProfiles.length;
-
-  const healthScores = allProfiles
-    .filter((p) => p.health_score !== undefined)
-    .map((p) => p.health_score);
   const avgHealth =
-    healthScores.length > 0
-      ? healthScores.reduce((a, b) => a + b, 0) / healthScores.length
-      : 0;
-
-  const churnCounts = { LOW: 0, MEDIUM: 0, HIGH: 0 };
-  for (const p of allProfiles) {
-    churnCounts[p.churn_risk]++;
-  }
+    totalProfiles > 0 ? healthScoreSum / totalProfiles : 0;
 
   return {
     profiles_generated: totalProfiles,
-    records_processed: totalProfiles * 4,
-    shards_processed: NUM_SHARDS,
+    records_processed: totalRecords,
+    shards_processed: shardResults.length,
     sample_profile: sampleProfile,
     statistics: {
       avg_health_score: Math.round(avgHealth * 10) / 10,
@@ -231,4 +267,3 @@ function aggregateResults(shardResults: ShardResult[]): AggregatedResult {
     },
   };
 }
-

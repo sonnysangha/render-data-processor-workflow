@@ -6,7 +6,7 @@ This demo showcases:
 
 - **Parallel processing**: 10 shards processed simultaneously
 - **Multi-source merge**: CRM + Billing + Product + Support → Enriched profiles
-- **High throughput**: 400K records processed in seconds
+- **High throughput**: 400K input records split across 10 parallel tasks
 - **Both Python and TypeScript**: Identical implementations in both languages
 
 ## Architecture
@@ -90,14 +90,14 @@ Same customer always routes to the same shard across all files.
 
    ```bash
    cd typescript/workflows
-   npm install
+   npm ci
    render workflows dev -- npx tsx src/main.ts
    ```
 
    Verify tasks registered:
 
    ```bash
-   render workflows list --local
+   render workflows tasks list --local
    ```
 
 3. **Start the matching API** (pick one):
@@ -116,8 +116,8 @@ Same customer always routes to the same shard across all files.
 
    ```bash
    cd typescript/api
-   npm install
-   RENDER_USE_LOCAL_DEV=true npm run dev
+   npm ci
+   RENDER_USE_LOCAL_DEV=true RENDER_API_KEY=local npm run dev
    ```
 
    If using the TypeScript API, also set `NEXT_PUBLIC_API_URL=http://localhost:8002` before starting the frontend.
@@ -137,7 +137,7 @@ Same customer always routes to the same shard across all files.
 
 | Variable | Default | Used by |
 |----------|---------|---------|
-| `RENDER_API_KEY` | (required for deployed services) | API services |
+| `RENDER_API_KEY` | (required for deployed services; use `local` for local dev) | API services |
 | `RENDER_USE_LOCAL_DEV` | `false` | API services (set `true` for local dev) |
 | `WORKFLOW_SLUG` | `data-processor-workflows-py` / `data-processor-workflows-ts` | API services |
 | `DATA_DIR` | `../../sample_data` | Workflow services |
@@ -147,7 +147,7 @@ Same customer always routes to the same shard across all files.
 
 ### 1. Deploy Frontend and API (Blueprint)
 
-The Blueprint (`render.yaml`) deploys the frontend and the **Python API** by default. If you prefer TypeScript, edit `render.yaml` to uncomment the TypeScript API and comment out the Python one (see the instructions in the file).
+The Blueprint (`render.yaml`) in this fork deploys the frontend and the **TypeScript API**. The Workflow is created separately because Workflows are not yet supported by Blueprints.
 
 [![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy)
 
@@ -174,23 +174,43 @@ Workflows are not yet supported in Blueprints. Create them manually:
 
 #### TypeScript Workflow
 
-1. In Render Dashboard: **New** → **Workflow**
-2. Connect your repo
-3. Settings:
-   - **Name**: `data-processor-workflows-ts`
-   - **Root Directory**: `typescript/workflows`
-   - **Build Command**: `npm install && npm run build`
-   - **Start Command**: `npm start`
-4. Deploy
+Create the Workflow from the repository root so the task can read
+`sample_data/`. Do **not** set a Root Directory: Render excludes files outside a
+configured root directory.
+
+```bash
+render workflows create \
+  --name data-processor-workflows-ts \
+  --repo https://github.com/sonnysangha/render-data-processor-workflow \
+  --branch main \
+  --runtime node \
+  --region frankfurt \
+  --build-command "cd typescript/workflows && npm ci && npm run build" \
+  --run-command "cd typescript/workflows && npm start" \
+  --env-var DATA_DIR=../../sample_data \
+  --auto-deploy-trigger commit
+```
 
 ### 3. Configure Environment Variables
 
 On each API service, set:
 
 - `RENDER_API_KEY`: Your Render API key (create at Dashboard → Account → API Keys)
-- `WORKFLOW_SLUG`: The workflow service name (the API appends `/merge_customer_data` automatically), e.g.:
-  - Python: `data-processor-workflows-py`
-  - TypeScript: `data-processor-workflows-ts`
+- `WORKFLOW_SLUG`: `data-processor-workflows-ts`
+- `DEMO_MODE`: `true` for the public demo
+- `FRONTEND_ORIGIN`: the frontend's exact public `https://...onrender.com` URL
+
+On the frontend static site, set:
+
+- `NEXT_PUBLIC_API_URL`: the API's exact public `https://...onrender.com` URL
+
+On the Workflow service, set:
+
+- `DATA_DIR`: `../../sample_data`
+
+Never expose `RENDER_API_KEY` through a `NEXT_PUBLIC_*` variable or commit it to
+the repository. See [DEPLOYMENT.md](./DEPLOYMENT.md) for the exact TypeScript
+deployment and verification commands.
 
 
 ## Project Structure
@@ -277,9 +297,13 @@ With 100K rows per source (400K total records):
 | Total records | 400,000 |
 | Shards | 10 |
 | Parallel tasks | 10 |
-| Estimated time | 2-5 seconds |
-| Sequential estimate | ~20+ seconds |
-| **Speedup** | **~5-10x** |
+| Runtime | Measure from the deployed task-run timings |
+| Sequential comparison | Sum of the 10 child-task durations |
+| Parallel comparison | Longest child-task duration |
+
+Runtime varies with the selected Workflow task plan and current infrastructure.
+Use the UI and Render Dashboard timings for recording-safe measurements instead
+of quoting an estimate.
 
 ## Customization
 

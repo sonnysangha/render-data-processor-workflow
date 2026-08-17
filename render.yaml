@@ -16,49 +16,30 @@ projects:
             name: customer-merge-frontend
             runtime: static
             rootDir: frontend
-            buildCommand: npm install && npm run build
+            buildCommand: npm ci && npm run build
             staticPublishPath: out
             envVars:
               - key: NEXT_PUBLIC_API_URL
-                fromService:
-                  type: web
-                  name: customer-merge-api-python
-                  property: host
+                # Set this to the API's public https://*.onrender.com URL.
+                # Render's fromService.host value is private-network-only and
+                # cannot be called by a user's browser.
+                sync: false
 
-          # Python API - FastAPI service
+          # TypeScript API - Fastify service
           - type: web
-            name: customer-merge-api-python
-            runtime: python
-            plan: starter
-            rootDir: python/api
-            buildCommand: pip install -r requirements.txt
-            startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
+            name: customer-merge-api-typescript
+            runtime: node
+            plan: free
+            rootDir: typescript/api
+            buildCommand: npm ci && npm run build
+            startCommand: npm start
+            healthCheckPath: /health
             envVars:
               - key: RENDER_API_KEY
                 sync: false
               - key: WORKFLOW_SLUG
-                sync: false
+                value: data-processor-workflows-ts
               - key: DEMO_MODE
+                value: "true"
+              - key: FRONTEND_ORIGIN
                 sync: false
-
-          # Choose either the Python API above OR the TypeScript API below,
-          # depending on your preference. Uncomment the one you want and
-          # comment out the other. If using TypeScript, also update the
-          # frontend's NEXT_PUBLIC_API_URL to reference
-          # customer-merge-api-typescript instead.
-          #
-          # # TypeScript API - Fastify service
-          # - type: web
-          #   name: customer-merge-api-typescript
-          #   runtime: node
-          #   plan: starter
-          #   rootDir: typescript/api
-          #   buildCommand: npm install && npm run build
-          #   startCommand: npm start
-          #   envVars:
-          #     - key: RENDER_API_KEY
-          #       sync: false
-          #     - key: WORKFLOW_SLUG
-          #       sync: false
-          #     - key: DEMO_MODE
-          #       sync: false
