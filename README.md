@@ -7,6 +7,7 @@ This demo showcases:
 - **Parallel processing**: 10 shards processed simultaneously
 - **Multi-source merge**: CRM + Billing + Product + Support → Enriched profiles
 - **High throughput**: 400K input records split across 10 parallel tasks
+- **Durable history**: completed run summaries persist in Render Postgres
 - **Both Python and TypeScript**: Identical implementations in both languages
 
 ## Architecture
@@ -38,6 +39,10 @@ This demo showcases:
 └─────────────────────────────────────────────────────────────────────┘
 ```
 
+The deployed TypeScript API also writes compact Workflow summaries to a
+private Render Postgres database. The frontend reads those rows through the API
+to show durable history; database credentials never reach the browser.
+
 ## Workflow: Shard-Based Parallel Processing
 
 The workflow uses hash-based sharding to ensure deterministic routing:
@@ -61,6 +66,7 @@ Same customer always routes to the same shard across all files.
 
 - Python 3.11+
 - Node.js 20+
+- PostgreSQL 16+ for TypeScript API local development
 - [Render CLI](https://render.com/docs/cli) 2.11.0+ (`brew install render` on macOS)
 - Render account with Workflows access
 
@@ -117,7 +123,10 @@ Same customer always routes to the same shard across all files.
    ```bash
    cd typescript/api
    npm ci
-   RENDER_USE_LOCAL_DEV=true RENDER_API_KEY=local npm run dev
+   DATABASE_URL=postgresql://localhost/customer_merge \
+     RENDER_USE_LOCAL_DEV=true \
+     RENDER_API_KEY=local \
+     npm run dev
    ```
 
    If using the TypeScript API, also set `NEXT_PUBLIC_API_URL=http://localhost:8002` before starting the frontend.
@@ -140,14 +149,17 @@ Same customer always routes to the same shard across all files.
 | `RENDER_API_KEY` | (required for deployed services; use `local` for local dev) | API services |
 | `RENDER_USE_LOCAL_DEV` | `false` | API services (set `true` for local dev) |
 | `WORKFLOW_SLUG` | Workflow service slug returned by `render workflows list` | API services |
+| `DATABASE_URL` | Render Postgres private connection string | TypeScript API |
 | `DATA_DIR` | `../../sample_data` | Workflow services |
 | `NEXT_PUBLIC_API_URL` | `http://localhost:8001` | Frontend |
 
 ## Deploy to Render
 
-### 1. Deploy Frontend and API (Blueprint)
+### 1. Deploy Frontend, API, and Postgres (Blueprint)
 
-The Blueprint (`render.yaml`) in this fork deploys the frontend and the **TypeScript API**. The Workflow is created separately because Workflows are not yet supported by Blueprints.
+The Blueprint (`render.yaml`) in this fork deploys the frontend, the
+**TypeScript API**, and a private Render Postgres database. The Workflow is
+created separately because Workflows are not yet supported by Blueprints.
 
 [![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy)
 
@@ -200,6 +212,9 @@ On each API service, set:
 - `DEMO_MODE`: `true` for the public demo
 - `FRONTEND_ORIGIN`: the frontend's exact public `https://...onrender.com` URL
 
+The Blueprint injects `DATABASE_URL` from `customer-merge-postgres` using its
+private connection string. Do not paste this value into a frontend variable.
+
 On the frontend static site, set:
 
 - `NEXT_PUBLIC_API_URL`: the API's exact public `https://...onrender.com` URL
@@ -226,7 +241,8 @@ deployment and verification commands.
 │   │   ├── WorkflowTrigger.tsx  # Run button
 │   │   ├── EventLog.tsx         # Terminal-style log
 │   │   ├── DataPreview.tsx      # Before/after view
-│   │   └── ResultsSummary.tsx   # Stats and shard timings
+│   │   ├── ResultsSummary.tsx   # Stats and shard timings
+│   │   └── RecentRuns.tsx       # Durable Postgres run history
 │   └── lib/
 │       ├── api.ts               # API client
 │       └── workflow-config.ts   # Visualizer config
@@ -240,6 +256,7 @@ deployment and verification commands.
 │       └── enrichment.py        # Score calculations
 │
 ├── typescript/
+│   ├── api/src/db.ts            # Postgres schema and run persistence
 │   ├── api/                     # Fastify service
 │   │   └── src/index.ts         # Trigger endpoints
 │   └── workflows/               # Render Workflow

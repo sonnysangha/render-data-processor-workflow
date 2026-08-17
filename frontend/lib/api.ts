@@ -20,6 +20,22 @@ export interface WorkflowResult {
   maxParallelMs?: number;
 }
 
+export interface RecentRun {
+  runId: string;
+  status: string;
+  startedAt: string;
+  completedAt?: string;
+  elapsedMs?: number;
+  profilesGenerated?: number;
+  recordsProcessed?: number;
+  shardsProcessed?: number;
+  error?: string;
+}
+
+interface RecentRunsResponse {
+  runs: RecentRun[];
+}
+
 function getApiUrl(): string {
   const envUrl = process.env.NEXT_PUBLIC_API_URL?.trim();
 
@@ -81,4 +97,25 @@ export async function getWorkflowResults(
   }
 
   return response.json();
+}
+
+export async function fetchRecentRuns(
+  limit = 5,
+  signal?: AbortSignal
+): Promise<RecentRun[]> {
+  const apiUrl = getApiUrl();
+  const safeLimit = Math.min(Math.max(Math.trunc(limit), 1), 20);
+
+  const response = await fetch(`${apiUrl}/runs?limit=${safeLimit.toString()}`, {
+    cache: "no-store",
+    signal,
+  });
+
+  if (!response.ok) {
+    const error = await response.text();
+    throw new Error(`Failed to load recent runs: ${error}`);
+  }
+
+  const data = (await response.json()) as RecentRunsResponse;
+  return data.runs;
 }

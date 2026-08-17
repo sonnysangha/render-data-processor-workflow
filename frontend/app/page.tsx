@@ -3,6 +3,7 @@
 import { useCallback, useRef, useState } from "react";
 import DataPreview from "@/components/DataPreview";
 import EventLog, { type LogEntry } from "@/components/EventLog";
+import RecentRuns from "@/components/RecentRuns";
 import ResultsSummary from "@/components/ResultsSummary";
 import WorkflowTrigger from "@/components/WorkflowTrigger";
 import {
@@ -26,6 +27,7 @@ export default function Home() {
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [result, setResult] = useState<WorkflowResult | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [historyRefreshKey, setHistoryRefreshKey] = useState(0);
   const processingIndexRef = useRef(0);
 
   const addLog = useCallback(
@@ -131,6 +133,7 @@ export default function Home() {
 
       setResult(workflowResult);
       setState("completed");
+      setHistoryRefreshKey((key) => key + 1);
     } catch (err) {
       const message = err instanceof Error ? err.message : "Unknown error";
       addLog(`ERROR: ${message}`, "error");
@@ -191,6 +194,9 @@ export default function Home() {
       {(state === "completed" || state === "error") && (
         <ResultsSummary result={result} error={error} />
       )}
+
+      {/* Durable Run History */}
+      <RecentRuns refreshKey={historyRefreshKey} />
     </main>
   );
 }
