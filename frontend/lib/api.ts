@@ -43,9 +43,6 @@ export async function triggerWorkflow(): Promise<{ runId: string }> {
 
   const response = await fetch(`${apiUrl}/trigger`, {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
   });
 
   if (!response.ok) {
