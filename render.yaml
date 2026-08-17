@@ -2,7 +2,7 @@
 #
 # Customer Data Merge - Render Workflows Demo
 #
-# This Blueprint deploys the frontend and API services.
+# This Blueprint deploys the frontend, API, and Postgres database.
 # Workflows must be created manually in the Render Dashboard
 # (see README.md for instructions).
 
@@ -45,3 +45,19 @@ projects:
                 value: "true"
               - key: FRONTEND_ORIGIN
                 sync: false
+              - key: DATABASE_URL
+                fromDatabase:
+                  name: customer-merge-postgres
+                  property: connectionString
+
+        databases:
+          # Durable Workflow run history. The API connects over Render's
+          # private Frankfurt network; public database access is disabled.
+          - name: customer-merge-postgres
+            plan: basic-256mb
+            diskSizeGB: 1
+            region: frankfurt
+            postgresMajorVersion: "18"
+            databaseName: customer_merge
+            user: customer_merge
+            ipAllowList: []

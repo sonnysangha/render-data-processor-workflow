@@ -1,6 +1,16 @@
 import Fastify from "fastify";
 import cors from "@fastify/cors";
 import { Render } from "@renderinc/sdk";
+import {
+  checkDatabaseConnection,
+  closeDatabase,
+  getRunStartedAt,
+  initializeDatabase,
+  insertPendingRun,
+  listRecentRuns,
+  persistTerminalRun,
+  type RecentRun,
+} from "./db.js";
 
 const fastify = Fastify({ logger: true, trustProxy: true });
 
@@ -22,11 +32,6 @@ const render = new Render();
 const WORKFLOW_NAME = process.env.WORKFLOW_SLUG || "data-processor-workflows-ts";
 const TASK_NAME = "merge_customer_data";
 const WORKFLOW_SLUG = `${WORKFLOW_NAME}/${TASK_NAME}`;
-
-// In-memory store for run metadata
-const runMetadata: Map<string, { startTime: number; status: string }> =
-  new Map();
-const RUN_METADATA_MAX_SIZE = 1000;
 
 // Demo mode: when enabled, rate-limits /trigger to prevent abuse of the
 // public live instance. Users who clone this template can leave it unset.
@@ -65,6 +70,10 @@ interface StatusResponse {
   maxParallelMs?: number;
 }
 
+interface RunsResponse {
+  runs: RecentRun[];
+}
+
 // Helper to get task run details with retry for completedAt
 async function getTaskRunWithRetry(taskId: string) {
   for (let retry = 0; retry < 5; retry++) {
@@ -78,12 +87,25 @@ async function getTaskRunWithRetry(taskId: string) {
   return render.workflows.getTaskRun(taskId);
 }
 
-// Health check
-fastify.get("/health", async () => {
-  return {
-    status: "healthy",
-    service: "customer-merge-api-typescript",
-  };
+// Health check includes a live database query so Render only routes traffic
+// when both the API process and its durable run-history store are available.
+fastify.get("/health", async (_request, reply) => {
+  try {
+    await checkDatabaseConnection();
+    return {
+      status: "healthy",
+      service: "customer-merge-api-typescript",
+      database: "connected",
+    };
+  } catch (error) {
+    fastify.log.error({ err: error }, "Database health check failed");
+    reply.code(503);
+    return {
+      status: "unhealthy",
+      service: "customer-merge-api-typescript",
+      database: "unavailable",
+    };
+  }
 });
 
 // Trigger workflow
@@ -103,21 +125,22 @@ fastify.post<{ Reply: TriggerResponse }>("/trigger", async (request, reply) => {
       triggerTimestamps.set(clientIp, Date.now());
     }
 
-    const startTime = Date.now();
+    const startedAt = new Date();
 
     // Trigger the workflow (startTask returns immediately, no SSE blocking)
     const taskRun = await render.workflows.startTask(WORKFLOW_SLUG, []);
     const runId = taskRun.taskRunId;
 
-    // Store metadata (evict oldest entries when at capacity)
-    if (DEMO_MODE && runMetadata.size >= RUN_METADATA_MAX_SIZE) {
-      const oldestKey = runMetadata.keys().next().value!;
-      runMetadata.delete(oldestKey);
+    // The Workflow has already started, so a temporary database failure must
+    // not hide its run ID from the caller.
+    try {
+      await insertPendingRun(runId, startedAt);
+    } catch (error) {
+      fastify.log.error(
+        { err: error, runId },
+        "Workflow started but pending run history could not be persisted"
+      );
     }
-    runMetadata.set(runId, {
-      startTime,
-      status: "pending",
-    });
 
     return {
       runId,
@@ -140,10 +163,44 @@ fastify.get<{ Params: { runId: string }; Reply: StatusResponse }>(
       // Get task run details
       const taskRun = await render.workflows.getTaskRun(runId);
 
-      // Calculate elapsed time
-      const metadata = runMetadata.get(runId);
-      const startTime = metadata?.startTime || Date.now();
-      const elapsedMs = Date.now() - startTime;
+      // Prefer the durable trigger timestamp. If the database is briefly
+      // unavailable, Render's own task timestamp keeps status polling useful.
+      let startedAt: Date | undefined;
+      try {
+        startedAt = await getRunStartedAt(runId);
+      } catch (error) {
+        fastify.log.error(
+          { err: error, runId },
+          "Could not read workflow start time from run history"
+        );
+      }
+
+      const renderStartedAt = taskRun.startedAt
+        ? new Date(taskRun.startedAt)
+        : undefined;
+      if (
+        !startedAt &&
+        renderStartedAt &&
+        !Number.isNaN(renderStartedAt.getTime())
+      ) {
+        startedAt = renderStartedAt;
+      }
+      startedAt ??= new Date();
+
+      const renderCompletedAt = taskRun.completedAt
+        ? new Date(taskRun.completedAt)
+        : undefined;
+      const completedAt =
+        renderCompletedAt && !Number.isNaN(renderCompletedAt.getTime())
+          ? renderCompletedAt
+          : new Date();
+      const elapsedMs = Math.max(
+        0,
+        (taskRun.status === "completed" || taskRun.status === "failed"
+          ? completedAt
+          : new Date()
+        ).getTime() - startedAt.getTime()
+      );
 
       const response: StatusResponse = {
         status: taskRun.status,
@@ -243,6 +300,32 @@ fastify.get<{ Params: { runId: string }; Reply: StatusResponse }>(
         response.error = "Workflow execution failed";
       }
 
+      // Polls are repeatable, so terminal writes use an idempotent upsert.
+      if (taskRun.status === "completed" || taskRun.status === "failed") {
+        try {
+          await persistTerminalRun({
+            runId,
+            status: taskRun.status,
+            startedAt,
+            completedAt,
+            elapsedMs: response.elapsedMs,
+            profilesGenerated: response.profilesGenerated,
+            recordsProcessed: response.recordsProcessed,
+            shardsProcessed: response.shardsProcessed,
+            sampleProfile: response.sampleProfile,
+            shardTimings: response.shardTimings,
+            totalSequentialMs: response.totalSequentialMs,
+            maxParallelMs: response.maxParallelMs,
+            error: response.error,
+          });
+        } catch (error) {
+          fastify.log.error(
+            { err: error, runId },
+            "Could not persist terminal workflow status"
+          );
+        }
+      }
+
       return response;
     } catch (error) {
       const message = error instanceof Error ? error.message : "Unknown error";
@@ -251,6 +334,26 @@ fastify.get<{ Params: { runId: string }; Reply: StatusResponse }>(
     }
   }
 );
+
+// List compact, durable run history for the frontend. The SQL LIMIT remains a
+// parameter and the API bounds it to keep the public demo response small.
+fastify.get<{
+  Querystring: { limit?: string };
+  Reply: RunsResponse;
+}>("/runs", async (request, reply) => {
+  const requestedLimit = Number.parseInt(request.query.limit ?? "5", 10);
+  const limit = Number.isFinite(requestedLimit)
+    ? Math.min(20, Math.max(1, requestedLimit))
+    : 5;
+
+  try {
+    return { runs: await listRecentRuns(limit) };
+  } catch (error) {
+    fastify.log.error({ err: error }, "Could not list workflow run history");
+    reply.code(503);
+    return { runs: [] };
+  }
+});
 
 // Get workflow results (redirects to status which has full details)
 fastify.get<{ Params: { runId: string }; Reply: StatusResponse }>(
@@ -265,6 +368,10 @@ fastify.get<{ Params: { runId: string }; Reply: StatusResponse }>(
 const port = parseInt(process.env.PORT || "8002", 10);
 
 try {
+  await initializeDatabase();
+  fastify.addHook("onClose", async () => {
+    await closeDatabase();
+  });
   await fastify.listen({ port, host: "0.0.0.0" });
   console.log(`Server running at http://localhost:${port}`);
 } catch (err) {

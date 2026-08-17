@@ -1,11 +1,12 @@
 # TypeScript deployment runbook
 
 This is the exact Render setup for the official Customer Data Merge demo. It
-deploys three resources and no database:
+deploys four resources:
 
 1. `data-processor-workflows-ts` — Render Workflow
 2. `customer-merge-api-typescript` — Fastify web service
 3. `customer-merge-frontend` — Next.js static site
+4. `customer-merge-postgres` — private Render Postgres run history
 
 ## 1. Validate locally
 
@@ -52,7 +53,7 @@ The only Workflow environment variable is set in **Workflow → Environment**:
 DATA_DIR=../../sample_data
 ```
 
-## 3. Deploy the API and frontend
+## 3. Deploy Postgres, the API, and the frontend
 
 In Render, create a Blueprint from this repository's `render.yaml`. Enter the
 following values when Render prompts for variables marked `sync: false`:
@@ -76,7 +77,13 @@ The Blueprint sets these non-secret API values itself:
 
 ```dotenv
 DEMO_MODE=true
+DATABASE_URL=<private connection string from customer-merge-postgres>
 ```
+
+`DATABASE_URL` is injected with `fromDatabase`; never copy it into the
+frontend. The database uses the paid `basic-256mb` type with 1 GB of storage in
+Frankfurt. The API remains on the Free web-service plan. Its empty
+`ipAllowList` disables public database connections.
 
 **Static site → Environment**
 
@@ -92,13 +99,14 @@ never be added to the frontend.
 
 ```bash
 render workflows list
-render workflows versions list data-processor-workflows-ts
+render workflows versions list <workflow-id>
+render pg list -o json
 
 curl --fail --silent --show-error \
   https://<api-host>.onrender.com/health
 
 render workflows start \
-  data-processor-workflows-ts/merge_customer_data \
+  <generated-workflow-slug>/merge_customer_data \
   --input='[]'
 
 curl --fail --silent --show-error \
@@ -111,4 +119,12 @@ Then trigger one run from the frontend and confirm:
 - exactly 10 `process_shard` child tasks complete;
 - `profiles_generated` is `100000`;
 - `records_processed` is `400000`;
-- the API returns one timing row per child task.
+- the API returns one timing row per child task;
+- `/runs` returns the completed run after a page refresh;
+- the row exists in Postgres:
+
+  ```bash
+  render psql customer-merge-postgres \
+    --command "SELECT run_id, status, profiles_generated, records_processed FROM workflow_runs ORDER BY started_at DESC LIMIT 5;" \
+    --output text
+  ```
