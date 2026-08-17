@@ -38,7 +38,9 @@ projects:
               - key: RENDER_API_KEY
                 sync: false
               - key: WORKFLOW_SLUG
-                value: data-processor-workflows-ts
+                # Set this to the generated Workflow Slug shown by
+                # `render workflows list` (it can include a suffix).
+                sync: false
               - key: DEMO_MODE
                 value: "true"
               - key: FRONTEND_ORIGIN

@@ -17,8 +17,8 @@ await fastify.register(cors, { origin: frontendOrigins });
 const render = new Render();
 
 // Workflow configuration
-// WORKFLOW_SLUG should be just the workflow name (e.g., "data-processor-workflows-ts")
-// We append the task name automatically
+// WORKFLOW_SLUG is the generated Workflow service slug shown by
+// `render workflows list`; Render can append a suffix. We append the task name.
 const WORKFLOW_NAME = process.env.WORKFLOW_SLUG || "data-processor-workflows-ts";
 const TASK_NAME = "merge_customer_data";
 const WORKFLOW_SLUG = `${WORKFLOW_NAME}/${TASK_NAME}`;
