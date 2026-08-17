@@ -59,11 +59,11 @@ export default function ResultsSummary({ result, error }: ResultsSummaryProps) {
           </div>
           <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 text-xs">
             {result.shardTimings.map((shard) => (
-              <div
-                key={shard.shard_id}
-                className="border border-gray-700 p-2"
-              >
-                <div className="text-terminal-green font-mono text-[10px] truncate" title={shard.task_run_id}>
+              <div key={shard.shard_id} className="border border-gray-700 p-2">
+                <div
+                  className="text-terminal-green font-mono text-[10px] truncate"
+                  title={shard.task_run_id}
+                >
                   {shard.task_run_id}
                 </div>
                 <div className="text-white font-mono mt-1">
@@ -87,7 +87,8 @@ export default function ResultsSummary({ result, error }: ResultsSummaryProps) {
             <span className="text-white">Actual parallel:</span>{" "}
             {(result.elapsedMs / 1000).toFixed(2)}s |{" "}
             <span className="text-terminal-green">
-              Speedup: {(result.totalSequentialMs / result.elapsedMs).toFixed(1)}x
+              Speedup:{" "}
+              {(result.totalSequentialMs / result.elapsedMs).toFixed(1)}x
             </span>
           </div>
         </div>

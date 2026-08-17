@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useRef } from "react";
+import { useCallback, useRef, useState } from "react";
 import DataPreview from "@/components/DataPreview";
 import EventLog, { type LogEntry } from "@/components/EventLog";
 import ResultsSummary from "@/components/ResultsSummary";
@@ -28,10 +28,13 @@ export default function Home() {
   const [error, setError] = useState<string | null>(null);
   const processingIndexRef = useRef(0);
 
-  const addLog = useCallback((message: string, type: LogEntry["type"] = "info") => {
-    const timestamp = new Date();
-    setLogs((prev) => [...prev, { timestamp, message, type }]);
-  }, []);
+  const addLog = useCallback(
+    (message: string, type: LogEntry["type"] = "info") => {
+      const timestamp = new Date();
+      setLogs((prev) => [...prev, { timestamp, message, type }]);
+    },
+    []
+  );
 
   const updateLastLog = useCallback((message: string) => {
     setLogs((prev) => {
@@ -55,7 +58,7 @@ export default function Home() {
       const { runId } = await triggerWorkflow();
       addLog(`RUN ID: ${runId}`, "success");
       addLog("SPAWNING 10 PARALLEL SHARD TASKS...");
-      
+
       // Add cycling status message immediately
       addLog(PROCESSING_MESSAGES[0], "info");
       processingIndexRef.current = 0;
@@ -70,8 +73,13 @@ export default function Home() {
         const status = await pollWorkflowStatus(runId);
 
         // Cycle through processing messages while not completed
-        if (status.status !== "completed" && status.status !== "failed" && attempts >= nextMessageChange) {
-          processingIndexRef.current = (processingIndexRef.current + 1) % PROCESSING_MESSAGES.length;
+        if (
+          status.status !== "completed" &&
+          status.status !== "failed" &&
+          attempts >= nextMessageChange
+        ) {
+          processingIndexRef.current =
+            (processingIndexRef.current + 1) % PROCESSING_MESSAGES.length;
           updateLastLog(PROCESSING_MESSAGES[processingIndexRef.current]);
           // Next change in 2-4 polls (1-2 seconds)
           nextMessageChange = attempts + 2 + Math.floor(Math.random() * 3);
@@ -93,15 +101,28 @@ export default function Home() {
         throw new Error("Workflow timed out");
       }
 
-      const shardCount = workflowResult.shardTimings?.length || workflowResult.shardsProcessed || 10;
+      const shardCount =
+        workflowResult.shardTimings?.length ||
+        workflowResult.shardsProcessed ||
+        10;
       addLog(`ALL ${shardCount} SHARDS COMPLETE`, "success");
-      
-      if (workflowResult.shardTimings && workflowResult.shardTimings.length > 0) {
-        const fastestMs = Math.min(...workflowResult.shardTimings.map(s => s.elapsed_ms));
-        const slowestMs = Math.max(...workflowResult.shardTimings.map(s => s.elapsed_ms));
-        addLog(`SHARD TIMES: ${(fastestMs/1000).toFixed(1)}s - ${(slowestMs/1000).toFixed(1)}s`, "info");
+
+      if (
+        workflowResult.shardTimings &&
+        workflowResult.shardTimings.length > 0
+      ) {
+        const fastestMs = Math.min(
+          ...workflowResult.shardTimings.map((s) => s.elapsed_ms)
+        );
+        const slowestMs = Math.max(
+          ...workflowResult.shardTimings.map((s) => s.elapsed_ms)
+        );
+        addLog(
+          `SHARD TIMES: ${(fastestMs / 1000).toFixed(1)}s - ${(slowestMs / 1000).toFixed(1)}s`,
+          "info"
+        );
       }
-      
+
       addLog("AGGREGATING RESULTS...");
       addLog(
         `WORKFLOW COMPLETE - ${workflowResult.profilesGenerated?.toLocaleString()} PROFILES`,
@@ -126,10 +147,7 @@ export default function Home() {
           <h1 className="text-2xl font-normal tracking-tight">
             CUSTOMER DATA MERGE
           </h1>
-          <a
-            href="/how-it-works"
-            className="brutalist-btn text-xs py-2 px-4"
-          >
+          <a href="/how-it-works" className="brutalist-btn text-xs py-2 px-4">
             HOW IT WORKS
           </a>
         </div>

@@ -21,21 +21,21 @@ export interface WorkflowResult {
 }
 
 function getApiUrl(): string {
-  const envUrl = process.env.NEXT_PUBLIC_API_URL;
-  
+  const envUrl = process.env.NEXT_PUBLIC_API_URL?.trim();
+
   if (!envUrl) {
-    return "http://localhost:8001";
+    return "http://localhost:8002";
   }
-  
-  // If the URL already has a scheme, use it as-is
-  if (envUrl.startsWith("http://") || envUrl.startsWith("https://")) {
-    return envUrl;
+
+  const normalizedUrl = envUrl.replace(/\/+$/, "");
+  if (
+    normalizedUrl.startsWith("http://") ||
+    normalizedUrl.startsWith("https://")
+  ) {
+    return normalizedUrl;
   }
-  
-  // Render's fromService gives "hostname:port" - construct full URL
-  // Extract just the hostname (remove port if present)
-  const hostname = envUrl.split(":")[0];
-  return `https://${hostname}.onrender.com`;
+
+  return `https://${normalizedUrl}`;
 }
 
 export async function triggerWorkflow(): Promise<{ runId: string }> {
@@ -85,4 +85,3 @@ export async function getWorkflowResults(
 
   return response.json();
 }
-
