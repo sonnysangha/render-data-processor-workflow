@@ -1,6 +1,7 @@
 {
   "name": "customer-data-merge-workflow-typescript",
   "version": "1.0.0",
+  "packageManager": "pnpm@11.1.2",
   "type": "module",
   "scripts": {
     "dev": "tsx watch src/main.ts",

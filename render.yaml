@@ -34,7 +34,7 @@ projects:
             repo: https://github.com/sonnysangha/render-data-processor-workflow
             branch: main
             rootDir: frontend
-            buildCommand: npm ci && npm run build
+            buildCommand: pnpm install --frozen-lockfile && pnpm run build
             staticPublishPath: out
             envVars:
               - key: NEXT_PUBLIC_API_URL
@@ -52,8 +52,8 @@ projects:
             repo: https://github.com/sonnysangha/render-data-processor-workflow
             branch: main
             rootDir: typescript/api
-            buildCommand: npm ci && npm run build
-            startCommand: npm start
+            buildCommand: pnpm install --frozen-lockfile && pnpm run build
+            startCommand: pnpm run start
             healthCheckPath: /health
             envVars:
               - key: RENDER_API_KEY
@@ -98,7 +98,7 @@ projects:
             repo: https://github.com/sonnysangha/render-data-processor-workflow
             branch: development
             rootDir: frontend
-            buildCommand: npm ci && npm run build
+            buildCommand: pnpm install --frozen-lockfile && pnpm run build
             staticPublishPath: out
             envVars:
               - key: NEXT_PUBLIC_API_URL
@@ -114,8 +114,8 @@ projects:
             repo: https://github.com/sonnysangha/render-data-processor-workflow
             branch: development
             rootDir: typescript/api
-            buildCommand: npm ci && npm run build
-            startCommand: npm start
+            buildCommand: pnpm install --frozen-lockfile && pnpm run build
+            startCommand: pnpm run start
             healthCheckPath: /health
             envVars:
               - key: RENDER_API_KEY
