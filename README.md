@@ -72,13 +72,42 @@ run everything locally.
 
 ### Prerequisites
 
-- Python 3.11+
 - Node.js 20+
-- PostgreSQL 16+ for TypeScript API local development
-- [Render CLI](https://render.com/docs/cli) 2.11.0+ (`brew install render` on macOS)
-- Render account with Workflows access
+- [pnpm](https://pnpm.io/) 11+
+- [Docker](https://www.docker.com/) (runs the local Postgres for the TypeScript API)
+- [Render CLI](https://render.com/docs/cli) 2.11.0+ (`brew install render` on macOS), logged in with `render login`
+- Python 3.11+ only if you use the Python workflow or API
 
 ### Local Development
+
+Fastest path (TypeScript workflow + API + frontend, all in one terminal):
+
+```bash
+pnpm run bootstrap && pnpm run dev
+```
+
+`pnpm run dev` starts local Postgres in Docker, the Render local task server on
+`:8120`, the TypeScript API on `:8002`, and the frontend on `:3000`, then
+prefixes every log line with `[workflow]`, `[api]`, or `[web]`. Open
+http://localhost:3000 and click **Run Workflow**. Runs go to the local task
+server (`RENDER_USE_LOCAL_DEV=true`), so nothing touches your Render account.
+`Ctrl-C` stops everything; `pnpm run down` removes the Postgres container.
+
+The workflow processes however many customers are currently in `sample_data/`.
+Choose any profile count with `pnpm run data --rows 10000`. The generator
+writes that many rows to each of the four CSVs, so 10K profiles means 40K input
+records. `pnpm run data:small` is the 1K shortcut and `pnpm run data:full`
+restores 100K. These commands rewrite tracked CSVs, so do not commit the result
+unless you intentionally want to change the demo dataset.
+
+You can also drive the workflow without the API or frontend: with
+`pnpm run dev:workflow` running, `render workflows tasks list --local` opens an
+interactive menu to run `merge_customer_data` with input `[]`, stream its logs,
+and view results.
+
+#### Manual setup (one process per terminal)
+
+Use this if you prefer separate terminals or want the Python implementation.
 
 1. **Generate sample data**:
 
@@ -104,8 +133,8 @@ run everything locally.
 
    ```bash
    cd typescript/workflows
-   npm ci
-   render workflows dev -- npx tsx src/main.ts
+   pnpm install --frozen-lockfile
+   render workflows dev -- pnpm exec tsx src/main.ts
    ```
 
    Verify tasks registered:
@@ -126,15 +155,16 @@ run everything locally.
    RENDER_USE_LOCAL_DEV=true python main.py
    ```
 
-   TypeScript (runs on http://localhost:8002):
+   TypeScript (runs on http://localhost:8002; needs Postgres, e.g.
+   `docker compose up -d` from the repo root):
 
    ```bash
    cd typescript/api
-   npm ci
-   DATABASE_URL=postgresql://localhost/customer_merge \
+   pnpm install --frozen-lockfile
+   DATABASE_URL=postgresql://customer_merge:customer_merge@localhost:5432/customer_merge \
      RENDER_USE_LOCAL_DEV=true \
      RENDER_API_KEY=local \
-     npm run dev
+     pnpm run dev
    ```
 
    If using the TypeScript API, also set `NEXT_PUBLIC_API_URL=http://localhost:8002` before starting the frontend.
@@ -143,8 +173,8 @@ run everything locally.
 
    ```bash
    cd frontend
-   npm install
-   npm run dev
+   pnpm install --frozen-lockfile
+   pnpm run dev
    # Runs on http://localhost:3000
    ```
 
@@ -152,14 +182,14 @@ run everything locally.
 
 ### Environment Variables
 
-| Variable | Default | Used by |
-|----------|---------|---------|
-| `RENDER_API_KEY` | (required for deployed services; use `local` for local dev) | API services |
-| `RENDER_USE_LOCAL_DEV` | `false` | API services (set `true` for local dev) |
-| `WORKFLOW_SLUG` | Workflow service slug returned by `render workflows list` | API services |
-| `DATABASE_URL` | Render Postgres private connection string | TypeScript API |
-| `DATA_DIR` | `../../sample_data` | Workflow services |
-| `NEXT_PUBLIC_API_URL` | `http://localhost:8001` | Frontend |
+| Variable               | Default                                                     | Used by                                 |
+| ---------------------- | ----------------------------------------------------------- | --------------------------------------- |
+| `RENDER_API_KEY`       | (required for deployed services; use `local` for local dev) | API services                            |
+| `RENDER_USE_LOCAL_DEV` | `false`                                                     | API services (set `true` for local dev) |
+| `WORKFLOW_SLUG`        | Workflow service slug returned by `render workflows list`   | API services                            |
+| `DATABASE_URL`         | Render Postgres private connection string                   | TypeScript API                          |
+| `DATA_DIR`             | `../../sample_data`                                         | Workflow services                       |
+| `NEXT_PUBLIC_API_URL`  | `http://localhost:8001`                                     | Frontend                                |
 
 ## Deploy to Render
 
@@ -191,8 +221,8 @@ render workflows create \
   --branch main \
   --runtime node \
   --region frankfurt \
-  --build-command "cd typescript/workflows && npm ci && npm run build" \
-  --run-command "cd typescript/workflows && npm start" \
+  --build-command "cd typescript/workflows && pnpm install --frozen-lockfile && pnpm run build" \
+  --run-command "cd typescript/workflows && pnpm run start" \
   --env-var DATA_DIR=../../sample_data \
   --auto-deploy-trigger commit
 ```
@@ -227,8 +257,8 @@ render workflows create \
   --branch development \
   --runtime node \
   --region frankfurt \
-  --build-command "cd typescript/workflows && npm ci && npm run build" \
-  --run-command "cd typescript/workflows && npm start" \
+  --build-command "cd typescript/workflows && pnpm install --frozen-lockfile && pnpm run build" \
+  --run-command "cd typescript/workflows && pnpm run start" \
   --env-var DATA_DIR=../../sample_data \
   --auto-deploy-trigger commit
 ```
@@ -247,9 +277,9 @@ a private Render Postgres database, wired together, in one step.
 
 It defines two environments under one Render project:
 
-| Environment | Branch | Resources |
-|-------------|--------|-----------|
-| `production` | `main` | `customer-merge-frontend`, `customer-merge-api-typescript`, `customer-merge-postgres` |
+| Environment   | Branch        | Resources                                                                                         |
+| ------------- | ------------- | ------------------------------------------------------------------------------------------------- |
+| `production`  | `main`        | `customer-merge-frontend`, `customer-merge-api-typescript`, `customer-merge-postgres`             |
 | `development` | `development` | `customer-merge-frontend-dev`, `customer-merge-api-typescript-dev`, `customer-merge-postgres-dev` |
 
 Both environments have the same shape. Development turns `DEMO_MODE` off so the
@@ -317,7 +347,6 @@ Never expose `RENDER_API_KEY` through a `NEXT_PUBLIC_*` variable or commit it to
 the repository. See [DEPLOYMENT.md](./DEPLOYMENT.md) for the exact TypeScript
 deployment and verification commands.
 
-
 ### Deploy with an AI agent
 
 Render ships skills and an MCP server for AI coding tools
@@ -351,8 +380,9 @@ that creates a paid resource.
 2. Workflow first. Create the production Workflow with `render workflows
    create` using the exact TypeScript command in README "1. Create the
    Workflow": from the repo root with NO root directory, runtime node, region
-   frankfurt, build `cd typescript/workflows && npm ci && npm run build`, run
-   `cd typescript/workflows && npm start`, env DATA_DIR=../../sample_data,
+   frankfurt, build `cd typescript/workflows && pnpm install --frozen-lockfile
+   && pnpm run build`, run `cd typescript/workflows && pnpm run start`, env
+   DATA_DIR=../../sample_data,
    auto-deploy on commit. Then create data-processor-workflows-ts-dev the same
    way from the `development` branch (or tell me if you want dev to share the
    production Workflow). Read both generated slugs from
@@ -426,7 +456,9 @@ render.yaml, do not commit anything, and keep the API on the free plan.
 ├── scripts/
 │   └── generate_data.py         # Data generator
 │
-├── render.yaml                  # Blueprint (frontend + APIs)
+├── render.yaml                  # Blueprint (frontend + API + Postgres, two environments)
+├── docker-compose.yml           # Local Postgres for `pnpm run dev`
+├── package.json                 # Root dev runner: `pnpm run bootstrap && pnpm run dev`
 └── README.md
 ```
 
@@ -435,21 +467,25 @@ render.yaml, do not commit anything, and keep the API on the free plan.
 ### Input CSVs
 
 **crm.csv**
+
 ```csv
 customer_id,email,company_name,industry,employee_count,deal_stage,deal_value,sales_owner,last_contact
 ```
 
 **billing.csv**
+
 ```csv
 customer_id,email,plan,mrr,payment_status,subscription_start,last_payment
 ```
 
 **product.csv**
+
 ```csv
 customer_id,email,signup_date,last_active,total_sessions,features_used,usage_pct,account_status
 ```
 
 **support.csv**
+
 ```csv
 customer_id,email,total_tickets,open_tickets,avg_resolution_hrs,last_ticket_date,nps_score,csat_score
 ```
@@ -466,14 +502,14 @@ All fields merged, plus calculated fields:
 
 With 100K rows per source (400K total records):
 
-| Metric | Value |
-|--------|-------|
-| Total records | 400,000 |
-| Shards | 10 |
-| Parallel tasks | 10 |
-| Runtime | Measure from the deployed task-run timings |
-| Sequential comparison | Sum of the 10 child-task durations |
-| Parallel comparison | Longest child-task duration |
+| Metric                | Value                                      |
+| --------------------- | ------------------------------------------ |
+| Total records         | 400,000                                    |
+| Shards                | 10                                         |
+| Parallel tasks        | 10                                         |
+| Runtime               | Measure from the deployed task-run timings |
+| Sequential comparison | Sum of the 10 child-task durations         |
+| Parallel comparison   | Longest child-task duration                |
 
 Runtime varies with the selected Workflow task plan and current infrastructure.
 Use the UI and Render Dashboard timings for recording-safe measurements instead
@@ -484,12 +520,14 @@ of quoting an estimate.
 ### Change shard count
 
 Edit `NUM_SHARDS` in:
+
 - `python/workflows/sharding.py`
 - `typescript/workflows/src/sharding.ts`
 
 ### Modify enrichment logic
 
 Edit the calculation functions in:
+
 - `python/workflows/enrichment.py`
 - `typescript/workflows/src/enrichment.ts`
 

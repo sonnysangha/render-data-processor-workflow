@@ -1,0 +1,23 @@
+# Local Postgres for the TypeScript API's run history. Same major version as
+# the Render Postgres in render.yaml. Only used by `pnpm run dev`; deployed
+# services use Render Postgres via DATABASE_URL.
+services:
+  db:
+    image: postgres:18
+    container_name: customer-merge-postgres
+    environment:
+      POSTGRES_USER: customer_merge
+      POSTGRES_PASSWORD: customer_merge
+      POSTGRES_DB: customer_merge
+    ports:
+      - "5432:5432"
+    volumes:
+      - customer-merge-pgdata:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U customer_merge -d customer_merge"]
+      interval: 2s
+      timeout: 5s
+      retries: 15
+
+volumes:
+  customer-merge-pgdata:

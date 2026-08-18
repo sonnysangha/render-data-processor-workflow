@@ -1,0 +1,21 @@
+{
+  "name": "render-data-processor-workflow",
+  "private": true,
+  "packageManager": "pnpm@11.1.2",
+  "description": "Local development runner for the Customer Data Merge demo. Deployed services live in frontend/, typescript/, and python/.",
+  "scripts": {
+    "bootstrap": "pnpm install --frozen-lockfile && pnpm --dir typescript/workflows install --frozen-lockfile && pnpm --dir typescript/api install --frozen-lockfile && pnpm --dir frontend install --frozen-lockfile",
+    "dev": "docker compose up -d --wait && concurrently -k -n workflow,api,web -c blue,green,magenta \"pnpm run dev:workflow\" \"pnpm run dev:api\" \"pnpm run dev:web\"",
+    "dev:workflow": "cd typescript/workflows && render workflows dev -- pnpm exec tsx src/main.ts",
+    "dev:api": "cd typescript/api && cross-env DATABASE_URL=postgresql://customer_merge:customer_merge@localhost:5432/customer_merge RENDER_USE_LOCAL_DEV=true RENDER_API_KEY=local pnpm run dev",
+    "dev:web": "cd frontend && cross-env NEXT_PUBLIC_API_URL=http://localhost:8002 pnpm run dev",
+    "down": "docker compose down",
+    "data": "python3 scripts/generate_data.py",
+    "data:small": "python3 scripts/generate_data.py --rows 1000",
+    "data:full": "python3 scripts/generate_data.py --rows 100000"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2",
+    "cross-env": "^7.0.3"
+  }
+}

@@ -5,9 +5,9 @@ This is the exact Render setup for the official Customer Data Merge demo.
 The Blueprint (`render.yaml`) defines one Render project,
 `customer-data-merge`, with two environments:
 
-| Environment | Branch | Frontend | API | Postgres |
-|-------------|--------|----------|-----|----------|
-| `production` | `main` | `customer-merge-frontend` | `customer-merge-api-typescript` | `customer-merge-postgres` |
+| Environment   | Branch        | Frontend                      | API                                 | Postgres                      |
+| ------------- | ------------- | ----------------------------- | ----------------------------------- | ----------------------------- |
+| `production`  | `main`        | `customer-merge-frontend`     | `customer-merge-api-typescript`     | `customer-merge-postgres`     |
 | `development` | `development` | `customer-merge-frontend-dev` | `customer-merge-api-typescript-dev` | `customer-merge-postgres-dev` |
 
 Render reads `render.yaml` from `main` only. Pushing to `development`
@@ -37,18 +37,18 @@ development.
 
 ```bash
 cd typescript/workflows
-npm ci
-npm run build
+pnpm install --frozen-lockfile
+pnpm run build
 
 cd ../../typescript/api
-npm ci
-npm run build
-npm audit
+pnpm install --frozen-lockfile
+pnpm run build
+pnpm audit
 
 cd ../../frontend
-npm ci
-npm run check
-npm run build
+pnpm install --frozen-lockfile
+pnpm run check
+pnpm run build
 
 cd ..
 render blueprints validate render.yaml
@@ -66,8 +66,8 @@ render workflows create \
   --branch main \
   --runtime node \
   --region frankfurt \
-  --build-command "cd typescript/workflows && npm ci && npm run build" \
-  --run-command "cd typescript/workflows && npm start" \
+  --build-command "cd typescript/workflows && pnpm install --frozen-lockfile && pnpm run build" \
+  --run-command "cd typescript/workflows && pnpm run start" \
   --env-var DATA_DIR=../../sample_data \
   --auto-deploy-trigger commit
 ```
