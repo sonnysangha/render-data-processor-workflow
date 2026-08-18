@@ -2,19 +2,37 @@
 #
 # Customer Data Merge - Render Workflows Demo
 #
-# This Blueprint deploys the frontend, API, and Postgres database.
-# Workflows must be created manually in the Render Dashboard
-# (see README.md for instructions).
+# This Blueprint deploys two environments of the frontend, API, and Postgres
+# database under one Render project:
+#
+#   production   tracks the `main` branch
+#   development  tracks the `development` branch
+#
+# The Workflow service is created next with `render workflows create`, one per
+# environment (see README.md, "Deploy to Render").
+#
+# Notes:
+# - Resource names are unique across a workspace, so development resources
+#   carry a `-dev` suffix.
+# - `fromDatabase` references only resolve within the same environment.
+# - The database `region`, `databaseName`, `user`, and `postgresMajorVersion`
+#   are immutable once created. Everything is pinned to Frankfurt so the API
+#   can reach Postgres over Render's region-scoped private network.
 
 projects:
   - name: customer-data-merge
     environments:
+      # ------------------------------------------------------------------
+      # Production - deploys from `main`
+      # ------------------------------------------------------------------
       - name: production
         services:
           # Frontend - Next.js static site
           - type: web
             name: customer-merge-frontend
             runtime: static
+            repo: https://github.com/sonnysangha/render-data-processor-workflow
+            branch: main
             rootDir: frontend
             buildCommand: npm ci && npm run build
             staticPublishPath: out
@@ -30,6 +48,9 @@ projects:
             name: customer-merge-api-typescript
             runtime: node
             plan: free
+            region: frankfurt
+            repo: https://github.com/sonnysangha/render-data-processor-workflow
+            branch: main
             rootDir: typescript/api
             buildCommand: npm ci && npm run build
             startCommand: npm start
@@ -54,6 +75,67 @@ projects:
           # Durable Workflow run history. The API connects over Render's
           # private Frankfurt network; public database access is disabled.
           - name: customer-merge-postgres
+            plan: basic-256mb
+            diskSizeGB: 1
+            region: frankfurt
+            postgresMajorVersion: "18"
+            databaseName: customer_merge
+            user: customer_merge
+            ipAllowList: []
+
+      # ------------------------------------------------------------------
+      # Development - deploys from `development`
+      # Same shape as production so the two stay in parity. Differences:
+      # `-dev` names, the `development` branch, and DEMO_MODE off so the
+      # trigger endpoint is not rate-limited while testing.
+      # ------------------------------------------------------------------
+      - name: development
+        services:
+          # Frontend - Next.js static site
+          - type: web
+            name: customer-merge-frontend-dev
+            runtime: static
+            repo: https://github.com/sonnysangha/render-data-processor-workflow
+            branch: development
+            rootDir: frontend
+            buildCommand: npm ci && npm run build
+            staticPublishPath: out
+            envVars:
+              - key: NEXT_PUBLIC_API_URL
+                # Public https://*.onrender.com URL of the dev API service.
+                sync: false
+
+          # TypeScript API - Fastify service
+          - type: web
+            name: customer-merge-api-typescript-dev
+            runtime: node
+            plan: free
+            region: frankfurt
+            repo: https://github.com/sonnysangha/render-data-processor-workflow
+            branch: development
+            rootDir: typescript/api
+            buildCommand: npm ci && npm run build
+            startCommand: npm start
+            healthCheckPath: /health
+            envVars:
+              - key: RENDER_API_KEY
+                sync: false
+              - key: WORKFLOW_SLUG
+                # Slug of the development Workflow (created from the
+                # `development` branch), or the production slug to share it.
+                sync: false
+              - key: DEMO_MODE
+                value: "false"
+              - key: FRONTEND_ORIGIN
+                sync: false
+              - key: DATABASE_URL
+                fromDatabase:
+                  name: customer-merge-postgres-dev
+                  property: connectionString
+
+        databases:
+          # Development run history. Private, same region as the dev API.
+          - name: customer-merge-postgres-dev
             plan: basic-256mb
             diskSizeGB: 1
             region: frankfurt

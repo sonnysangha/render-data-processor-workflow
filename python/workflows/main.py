@@ -109,7 +109,8 @@ def process_shard(shard_id: int) -> dict[str, Any]:
         shard_id: The shard ID to process (0 to NUM_SHARDS-1)
         
     Returns:
-        Dictionary with shard_id, profiles, and count
+        Compact shard summary: shard_id, count, records_processed,
+        health_score_sum, churn_distribution, and one sample_profile
     """
     print(f"Shard {shard_id}: Loading CSV files...")
     
@@ -163,11 +164,26 @@ def process_shard(shard_id: int) -> dict[str, Any]:
         profiles.append(enriched)
     
     print(f"Shard {shard_id}: Generated {len(profiles)} enriched profiles")
-    
+
+    # Return a compact summary, not the profiles themselves. Task inputs and
+    # outputs are capped at 4 MB, and a full shard of enriched profiles would
+    # exceed that. Mirrors typescript/workflows/src/main.ts.
+    records_processed = (
+        len(crm_shard) + len(billing_shard) + len(product_shard) + len(support_shard)
+    )
+    churn_distribution = {"LOW": 0, "MEDIUM": 0, "HIGH": 0}
+    health_score_sum = 0
+    for p in profiles:
+        churn_distribution[p["churn_risk"]] += 1
+        health_score_sum += p["health_score"]
+
     return {
         "shard_id": shard_id,
-        "profiles": profiles,
         "count": len(profiles),
+        "records_processed": records_processed,
+        "health_score_sum": health_score_sum,
+        "churn_distribution": churn_distribution,
+        "sample_profile": profiles[0] if profiles else None,
     }
 
 
@@ -176,19 +192,30 @@ def aggregate_results(shard_results: list[dict[str, Any]]) -> dict[str, Any]:
     Aggregate results from all shards into final output.
     
     This runs in the orchestrator (not as a subtask) to avoid passing
-    large profile data between tasks.
+    large profile data between tasks. It only sees the compact per-shard
+    summaries returned by process_shard, never the full profiles.
     
     Args:
         shard_results: List of results from each process_shard task
         
     Returns:
-        Final aggregated result with statistics and per-shard timing
+        Final aggregated result with statistics and per-shard counts
     """
-    all_profiles = []
+    total_profiles = 0
+    total_records = 0
+    health_score_sum = 0
+    churn_counts = {"LOW": 0, "MEDIUM": 0, "HIGH": 0}
+    sample_profile = None
     shard_timings = []
     
     for shard_result in shard_results:
-        all_profiles.extend(shard_result["profiles"])
+        total_profiles += shard_result["count"]
+        total_records += shard_result["records_processed"]
+        health_score_sum += shard_result["health_score_sum"]
+        for risk in churn_counts:
+            churn_counts[risk] += shard_result["churn_distribution"].get(risk, 0)
+        if sample_profile is None:
+            sample_profile = shard_result.get("sample_profile")
         shard_timings.append({
             "shard_id": shard_result["shard_id"],
             "count": shard_result["count"],
@@ -197,24 +224,12 @@ def aggregate_results(shard_results: list[dict[str, Any]]) -> dict[str, Any]:
     # Sort by shard_id for consistent display
     shard_timings.sort(key=lambda x: x["shard_id"])
     
-    # Get a sample profile for the frontend preview
-    sample_profile = all_profiles[0] if all_profiles else None
-    
-    # Calculate statistics
-    total_profiles = len(all_profiles)
-    
-    health_scores = [p.get("health_score", 0) for p in all_profiles if "health_score" in p]
-    avg_health = sum(health_scores) / len(health_scores) if health_scores else 0
-    
-    churn_counts = {"LOW": 0, "MEDIUM": 0, "HIGH": 0}
-    for p in all_profiles:
-        risk = p.get("churn_risk", "MEDIUM")
-        churn_counts[risk] = churn_counts.get(risk, 0) + 1
+    avg_health = health_score_sum / total_profiles if total_profiles else 0
     
     return {
         "profiles_generated": total_profiles,
-        "records_processed": total_profiles * 4,  # Approximate (4 sources)
-        "shards_processed": NUM_SHARDS,
+        "records_processed": total_records,
+        "shards_processed": len(shard_results),
         "sample_profile": sample_profile,
         "shard_timings": shard_timings,
         "statistics": {

@@ -1,12 +1,37 @@
 # TypeScript deployment runbook
 
-This is the exact Render setup for the official Customer Data Merge demo. It
-deploys four resources:
+This is the exact Render setup for the official Customer Data Merge demo.
+
+The Blueprint (`render.yaml`) defines one Render project,
+`customer-data-merge`, with two environments:
+
+| Environment | Branch | Frontend | API | Postgres |
+|-------------|--------|----------|-----|----------|
+| `production` | `main` | `customer-merge-frontend` | `customer-merge-api-typescript` | `customer-merge-postgres` |
+| `development` | `development` | `customer-merge-frontend-dev` | `customer-merge-api-typescript-dev` | `customer-merge-postgres-dev` |
+
+Render reads `render.yaml` from `main` only. Pushing to `development`
+redeploys the dev services but does not change the Blueprint. The
+`development` branch must exist before Render can sync the Blueprint:
+
+```bash
+git push origin main:development
+```
+
+Each environment also gets a Workflow service, created with
+`render workflows create` after the Blueprint. Production deploys four
+resources:
 
 1. `data-processor-workflows-ts` — Render Workflow
 2. `customer-merge-api-typescript` — Fastify web service
 3. `customer-merge-frontend` — Next.js static site
 4. `customer-merge-postgres` — private Render Postgres run history
+
+Development mirrors this with `-dev` names, `DEMO_MODE=false`, and either its
+own `data-processor-workflows-ts-dev` Workflow (created from the `development`
+branch) or the production `WORKFLOW_SLUG` if you want to share one Workflow.
+The steps below show production; repeat them with the `-dev` names for
+development.
 
 ## 1. Validate locally
 
@@ -55,8 +80,15 @@ DATA_DIR=../../sample_data
 
 ## 3. Deploy Postgres, the API, and the frontend
 
-In Render, create a Blueprint from this repository's `render.yaml`. Enter the
-following values when Render prompts for variables marked `sync: false`:
+In Render, create a Blueprint from this repository's `render.yaml`. Both
+environments are created from the same Blueprint. If Render finds matching
+services that already exist, choose **Associate existing services** rather
+than creating duplicates. Render prompts for the variables marked
+`sync: false`; each environment has its own set. `RENDER_API_KEY` and
+`WORKFLOW_SLUG` (from step 2) can be entered at the prompt. `FRONTEND_ORIGIN`
+and `NEXT_PUBLIC_API_URL` are the public `https://...onrender.com` URLs Render
+generates during this step, so leave them blank and set them once the services
+exist:
 
 **API service → Environment**
 
@@ -73,7 +105,8 @@ Render can append a suffix to the Workflow Slug even when the service name is
 render workflows list -o json
 ```
 
-The Blueprint sets these non-secret API values itself:
+The Blueprint sets these non-secret API values itself (`DEMO_MODE=false` and
+`customer-merge-postgres-dev` in development):
 
 ```dotenv
 DEMO_MODE=true
