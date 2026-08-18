@@ -312,7 +312,9 @@ Each environment needs its own `sync: false` values (`RENDER_API_KEY`,
 Workflow created from the matching branch (or point the dev API's
 `WORKFLOW_SLUG` at the production Workflow to share it).
 
-Click the **Deploy to Render** button above, or manually:
+[![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://dashboard.render.com/blueprint/new?repo=https://github.com/sonnysangha/render-data-processor-workflow)
+
+Click the button, or manually:
 
 1. Push this repo to GitHub/GitLab
 2. In Render Dashboard: **New** → **Blueprint**
@@ -407,6 +409,10 @@ echo 'export RENDER_API_KEY="rnd_..."' >> ~/.zshrc
 
 That puts the key where the agent's terminal can read it. You never paste the
 key into the chat. Restart your coding tool once so it sees the new variable.
+
+When the agent reaches STEP 3 it will hand you this same button to click:
+
+[![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://dashboard.render.com/blueprint/new?repo=https://github.com/sonnysangha/render-data-processor-workflow)
 
 #### 3. Paste this prompt into your agent
 
@@ -664,3 +670,9 @@ python scripts/generate_data.py --rows 1000000  # 1M rows
 - [Render Workflows Documentation](https://render.com/docs/workflows)
 - [Render Workflows SDK (Python)](https://render.com/docs/workflows-sdk-python)
 - [Render Workflows SDK (TypeScript)](https://github.com/render-oss/sdk/tree/main/typescript)
+
+---
+
+Ready to try it? One click deploys the whole stack to your Render workspace.
+
+[![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://dashboard.render.com/blueprint/new?repo=https://github.com/sonnysangha/render-data-processor-workflow)
