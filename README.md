@@ -2,6 +2,20 @@
 
 Merge customer data from multiple sources into enriched profiles using parallel Render Workflows.
 
+## Before you start
+
+Everything in this repo runs on [Render](https://render.com). Do these two
+steps first; the rest of the README assumes you have.
+
+1. **Create your Render account** using this link:
+   **[dashboard.render.com/register](https://dashboard.render.com/register?utm_source=youtube&utm_medium=other&utm_campaign=2026_partnership_sonny)**
+2. **Claim your $50 in free Render credits** (viewers of this project) here:
+   **[credits-portal-mmdm.onrender.com/claim/sonny-youtube](https://credits-portal-mmdm.onrender.com/claim/sonny-youtube)**
+   Sign in with the account from step 1 before claiming.
+
+The credits cover the paid pieces of this demo (the two `basic-256mb` Postgres
+databases and Workflow compute); the frontends and the API run on free plans.
+
 [![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://dashboard.render.com/blueprint/new?repo=https://github.com/sonnysangha/render-data-processor-workflow)
 
 This demo showcases:
@@ -349,70 +363,160 @@ deployment and verification commands.
 
 ### Deploy with an AI agent
 
-Render ships skills and an MCP server for AI coding tools
-([render.com/docs/llm-support](https://render.com/docs/llm-support)). With
-those installed, an agent can run every step above except one click: deploying
-the Blueprint happens in the Render Dashboard, and you paste `RENDER_API_KEY`
-there yourself. Everything else (branch, Workflow, slugs, URLs, env vars,
-redeploys, verification) is CLI/MCP work the agent can do.
+New to Render? You can have an AI coding agent (Claude Code, Cursor, Codex,
+OpenCode) walk you through the whole deployment. Render publishes skills and an
+MCP server for exactly this ([render.com/docs/llm-support](https://render.com/docs/llm-support)).
+The agent does the terminal work and tells you, in plain language, what to
+click when a step needs a human (deploying the Blueprint and typing in your API
+key are the two things only you can do).
 
-Install the Render plugin (Claude Code shown; the same skills work in Cursor,
-Codex, and OpenCode via `render skills install`):
+#### 1. Install the tools (one time)
+
+You need three things: a Render account (see [Before you start](#before-you-start)
+for the sign-up and free-credits links), the Render CLI, and the Render skills.
+
+```bash
+# Render CLI (macOS). Other platforms: https://render.com/docs/cli
+brew install render
+render login          # opens the browser; sign in and come back
+```
+
+Then the skills. Claude Code (this also installs Render's MCP server):
 
 ```bash
 claude plugin marketplace add render-oss/skills
 claude plugin install render@render-plugins
 ```
 
-Log the Render CLI in (`render login`) and export `RENDER_API_KEY` so the MCP
-server can reach your workspace. Then paste this prompt:
+Cursor, Codex, or OpenCode:
+
+```bash
+render skills install
+```
+
+#### 2. Give the agent an API key (one time)
+
+The agent needs a Render API key to change settings on your behalf. Create one
+in the Render Dashboard: click your avatar → **Account Settings** → **API Keys**
+→ **Create API Key**. Copy it, then run this in your terminal (replace the
+`rnd_...` part with your key):
+
+```bash
+echo 'export RENDER_API_KEY="rnd_..."' >> ~/.zshrc
+```
+
+That puts the key where the agent's terminal can read it. You never paste the
+key into the chat. Restart your coding tool once so it sees the new variable.
+
+#### 3. Paste this prompt into your agent
 
 ```text
-Deploy this repo to Render using the installed Render skills (render-workflows,
-render-blueprints, render-env-vars) and the Render MCP/CLI. Work in this exact
-order, show me each command before running it, and stop to ask before anything
-that creates a paid resource.
+I'm new to Render. Please walk me through deploying this repo, step by step,
+using the installed Render skills (render-workflows, render-blueprints,
+render-env-vars, render-cli), the Render CLI, and the Render REST API
+(https://api.render.com/v1 with the Bearer token in $RENDER_API_KEY from my
+shell). Treat me as a beginner:
 
-1. Branch. Make sure a `development` branch exists on origin; if not, run
-   `git push origin main:development`. Render reads render.yaml from `main`
-   and deploys the dev services from `development`.
+- Before each step, tell me in one or two plain sentences what we're about to
+  do and why. Avoid jargon; if you must use a term (Blueprint, Workflow,
+  environment variable), define it the first time.
+- Show me every command before you run it. Stop and ask before anything that
+  costs money.
+- When a step needs me to click in the Render Dashboard, give me the exact
+  page, button labels, and values to type, then wait for me to say "done".
+- Never print, log, or commit my API key. Never put it in a NEXT_PUBLIC_*
+  variable.
+- After each step, confirm it worked and tell me what changed.
 
-2. Workflow first. Create the production Workflow with `render workflows
-   create` using the exact TypeScript command in README "1. Create the
-   Workflow": from the repo root with NO root directory, runtime node, region
-   frankfurt, build `cd typescript/workflows && pnpm install --frozen-lockfile
-   && pnpm run build`, run `cd typescript/workflows && pnpm run start`, env
-   DATA_DIR=../../sample_data,
-   auto-deploy on commit. Then create data-processor-workflows-ts-dev the same
-   way from the `development` branch (or tell me if you want dev to share the
-   production Workflow). Read both generated slugs from
-   `render workflows list -o json`; Render appends a suffix, so use the exact
-   slug values.
+Here is the plan. Do it in this order.
 
-3. Blueprint. Run `render blueprints validate render.yaml`. Then give me the
-   link to deploy it (New → Blueprint, this repo, branch main). Tell me to
-   choose "Associate existing services" if Render finds matching services,
-   to paste the production and dev Workflow slugs into WORKFLOW_SLUG, to
-   enter RENDER_API_KEY myself, and to leave FRONTEND_ORIGIN and
-   NEXT_PUBLIC_API_URL blank. Wait for me to confirm it finished.
+STEP 0 - Check my setup. Confirm `render whoami` works, `$RENDER_API_KEY` is
+set (check that it is non-empty; do not display it), Docker is not needed for
+deployment, and this repo has a git remote on GitHub. If anything is missing,
+tell me how to fix it and stop.
 
-4. URLs. Read the generated public https URLs of all four web services
-   (production and dev frontend + API) with `render services list -o json`
-   or the Render MCP. Then, per environment:
-   - set FRONTEND_ORIGIN on the API to that environment's frontend URL;
-   - set NEXT_PUBLIC_API_URL on the frontend to that environment's API URL,
-     then trigger a frontend redeploy (it is a build-time variable).
-   DEMO_MODE and DATABASE_URL are set by the Blueprint; do not touch them.
-   Never put RENDER_API_KEY in a NEXT_PUBLIC_* variable, never print it,
-   never commit it.
+STEP 1 - Branch. This project deploys two copies of the app: "production"
+from the `main` branch and "development" from a `development` branch. Check
+whether `development` exists on origin; if not, create it from main with
+`git push origin main:development`. Explain that Render reads render.yaml
+from `main` only, and pushing to `development` updates the dev copy.
 
-5. Verify production, then development: GET <api>/health returns 200 with
-   database "connected"; open the frontend, click Run Workflow, confirm the
-   run completes with 10 process_shard child tasks; GET <api>/runs shows the
-   persisted row.
+STEP 2 - Create the two Workflows. Explain that a Workflow is the background
+service that runs the data-merge tasks, and that we create it first so we
+have its ID for the next step. Use the exact TypeScript command from README
+"1. Create the Workflow": run from the repo root with NO root directory,
+runtime node, region frankfurt, build `cd typescript/workflows && pnpm
+install --frozen-lockfile && pnpm run build`, run `cd typescript/workflows &&
+pnpm run start`, env DATA_DIR=../../sample_data, auto-deploy on commit. Then
+create `data-processor-workflows-ts-dev` the same way from the `development`
+branch. Read both generated slugs from `render workflows list -o json` (Render
+may add a suffix; the exact slug matters) and show them to me clearly labelled
+"production slug" and "development slug". Wait for both to finish building
+(`render workflows versions list <id>` shows "ready") before moving on.
 
-Report the four public URLs and both Workflow slugs when done. Do not edit
-render.yaml, do not commit anything, and keep the API on the free plan.
+STEP 3 - Deploy the Blueprint (my click). Explain that render.yaml is a
+single file describing the frontend, the API, and the database for both
+environments, and that Render creates all six from it in one go. Run
+`render blueprints validate render.yaml` first and show me it says valid.
+Then give me this link to open (fill in my repo's GitHub URL from
+`git remote get-url origin`):
+https://dashboard.render.com/blueprint/new?repo=<my repo URL>
+and walk me through the page:
+  - Blueprint Name: type customer-data-merge. Branch: main. Leave Blueprint
+    Path empty.
+  - Under "Review Blueprint configurations" I will see six things being
+    created: an environment called development, two databases, two static
+    sites (the frontends), and two web services (the APIs). Some have empty
+    boxes next to them asking for values. This is the only time Render asks
+    for these, so here is what goes in each:
+      * customer-merge-api-typescript -> WORKFLOW_SLUG: the production slug
+        from STEP 2. RENDER_API_KEY: my API key (I type it; you never see it).
+      * customer-merge-api-typescript-dev -> WORKFLOW_SLUG: the development
+        slug from STEP 2. RENDER_API_KEY: my API key again.
+      * FRONTEND_ORIGIN (on both APIs) and NEXT_PUBLIC_API_URL (on both
+        frontends): leave EMPTY. Explain why: these are the public web
+        addresses of the frontend and API, and Render only invents those
+        addresses when I click Deploy, so we fill them in during STEP 4.
+  - Click "Deploy Blueprint". It takes a few minutes; wait until every
+    resource shows as live/available.
+Then wait for me to say "done" and confirm from your side with
+`render projects list` and `render environments <projectId>` that the project
+now has both `production` and `development`, and with
+`render services list -o json` that four web services and two databases exist.
+Show me that list with the public URLs.
+
+STEP 4 - Connect the frontend and API in each environment. Explain that the
+frontend needs to know the API's address (build-time), and the API needs to
+know the frontend's address (so browsers are allowed to call it). Read the
+four public https URLs from `render services list -o json`. For each
+environment, using the single-key endpoint
+PUT /v1/services/{serviceId}/env-vars/{KEY} (never the bulk PUT, which wipes
+every other variable):
+  - set FRONTEND_ORIGIN on the API to that environment's frontend URL, then
+    `render deploys create <api-id> --wait`;
+  - set NEXT_PUBLIC_API_URL on the frontend to that environment's API URL,
+    then `render deploys create <frontend-id> --clear-cache --wait`.
+Do not touch DEMO_MODE or DATABASE_URL; the Blueprint manages those.
+
+STEP 5 - Tidy the Dashboard. Explain that the project page groups resources
+by environment and that Workflows have to be added to it. Add each Workflow
+to its environment with POST /v1/environments/{envId}/resources and body
+{"resourceIds":["<workflow id>"]} (env IDs from `render environments
+<projectId>`). Ask me to open the project page and confirm each environment
+lists its Workflow; if not, tell me where to add it by hand.
+
+STEP 6 - Prove it works. For each environment: GET <api>/health returns 200
+with database "connected"; a request with header
+`Origin: <that environment's frontend URL>` gets back an
+Access-Control-Allow-Origin header; POST <api>/trigger (with that Origin
+header) returns a runId; poll <api>/status/<runId> until completed and show
+me profiles, records, and the 10 shard timings; GET <api>/runs shows the
+saved run. Then tell me to open the production frontend URL and click
+"Run Workflow" myself.
+
+Finish with a short summary I can keep: the four public URLs, both Workflow
+slugs, and the one-line explanation of what each environment is for. Do not
+edit render.yaml, do not commit anything, and keep the API on the free plan.
 ```
 
 ## Project Structure
